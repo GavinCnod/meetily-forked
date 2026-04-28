@@ -188,6 +188,11 @@ pub struct TranscriptSegment {
     pub audio_end_time: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
+    // Terminology correction fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub corrections_applied: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

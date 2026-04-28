@@ -1,0 +1,21 @@
+original,replacement,language,priority,category,description
+甲本二亿情酸纸,甲苯二异氰酸酯,zh,high,chemical,TDI - 甲苯二异氰酸酯
+二本甲烷二亿情酸纸,二苯基甲烷二异氰酸酯,zh,high,chemical,MDI - 二苯基甲烷二异氰酸酯
+聚氨纸,聚氨酯,zh,high,chemical,Polyurethane
+亿情酸纸,异氰酸酯,zh,high,chemical,Isocyanate
+假全,甲醛,zh,high,chemical,Formaldehyde
+本,苯,zh,high,chemical,Benzene
+假本,甲苯,zh,high,chemical,Toluene
+二假本,二甲苯,zh,high,chemical,Xylene
+乙西,乙烯,zh,high,chemical,Ethylene
+丙西,丙烯,zh,high,chemical,Propylene
+绿气,氯气,zh,high,chemical,Chlorine
+安气,氨气,zh,high,chemical,Ammonia
+轻氧化钠,氢氧化钠,zh,high,chemical,Sodium hydroxide
+刘酸,硫酸,zh,high,chemical,Sulfuric acid
+消酸,硝酸,zh,high,chemical,Nitric acid
+盐栓,盐酸,zh,high,chemical,Hydrochloric acid
+过氧化轻,过氧化氢,zh,high,chemical,Hydrogen peroxide
+青化氢,氰化氢,zh,high,chemical,Hydrogen cyanide
+重各酸钾,重铬酸钾,zh,high,chemical,Potassium dichromate
+高猛酸钾,高锰酸钾,zh,high,chemical,Potassium permanganate

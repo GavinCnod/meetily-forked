@@ -82,6 +82,71 @@ impl TranscriptsRepository {
         Ok(meeting_id)
     }
 
+    /// Save transcript with terminology metadata (raw_transcript, snapshot hash, L1 prompt snapshot).
+    pub async fn save_transcript_with_terminology(
+        pool: &SqlitePool,
+        meeting_title: &str,
+        transcripts: &[TranscriptSegment],
+        folder_path: Option<String>,
+        terminology_snapshot_hash: &str,
+        l1_prompt_snapshot: &str,
+    ) -> Result<String, SqlxError> {
+        let meeting_id = format!("meeting-{}", Uuid::new_v4());
+
+        let mut conn = pool.acquire().await?;
+        let mut transaction = conn.begin().await?;
+
+        let now = Utc::now();
+
+        // 1. Create the new meeting
+        let result = sqlx::query(
+            "INSERT INTO meetings (id, title, created_at, updated_at, folder_path) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&meeting_id)
+        .bind(meeting_title)
+        .bind(now)
+        .bind(now)
+        .bind(&folder_path)
+        .execute(&mut *transaction)
+        .await;
+
+        if let Err(e) = result {
+            error!("Failed to create meeting '{}': {}", meeting_title, e);
+            transaction.rollback().await?;
+            return Err(e);
+        }
+
+        // 2. Save each transcript segment with raw_text and terminology metadata
+        for segment in transcripts {
+            let transcript_id = format!("transcript-{}", Uuid::new_v4());
+            let result = sqlx::query(
+                "INSERT INTO transcripts (id, meeting_id, transcript, timestamp, audio_start_time, audio_end_time, duration, raw_transcript, terminology_snapshot_hash, l1_prompt_snapshot)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            )
+            .bind(&transcript_id)
+            .bind(&meeting_id)
+            .bind(&segment.text)
+            .bind(&segment.timestamp)
+            .bind(segment.audio_start_time)
+            .bind(segment.audio_end_time)
+            .bind(segment.duration)
+            .bind(&segment.raw_text)
+            .bind(terminology_snapshot_hash)
+            .bind(l1_prompt_snapshot)
+            .execute(&mut *transaction)
+            .await;
+
+            if let Err(e) = result {
+                error!("Failed to save transcript segment for meeting {}: {}", meeting_id, e);
+                transaction.rollback().await?;
+                return Err(e);
+            }
+        }
+
+        transaction.commit().await?;
+        Ok(meeting_id)
+    }
+
     /// Searches for a query string within the transcripts.
     /// It returns a list of matching transcripts with context.
     pub async fn search_transcripts(

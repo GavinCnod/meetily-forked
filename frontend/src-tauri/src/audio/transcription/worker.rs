@@ -36,6 +36,11 @@ pub struct TranscriptUpdate {
     pub audio_start_time: f64, // Seconds from recording start (e.g., 125.3)
     pub audio_end_time: f64,   // Seconds from recording start (e.g., 128.6)
     pub duration: f64,          // Segment duration in seconds (e.g., 3.3)
+    // Terminology correction fields (Phase 1A)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub corrections_applied: Option<u32>,
 }
 
 // NOTE: get_transcript_history and get_recording_meeting_name functions
@@ -203,10 +208,30 @@ pub fn start_transcription_task<R: Runtime>(
                                         // The recording_commands module listens to these events and saves them
                                         // This decouples the transcription worker from direct RECORDING_MANAGER access
 
+                                        // Apply L2 terminology correction (raw_text preserved for audit)
+                                        let raw_text = transcript.clone();
+                                        let (display_text, corrections_count) = {
+                                            let cache = app_clone
+                                                .try_state::<crate::terminology::cache::TerminologyCacheState>();
+                                            match cache {
+                                                Some(state) => {
+                                                    let rules = state.get_rules().await;
+                                                    if rules.is_empty() {
+                                                        (std::borrow::Cow::Borrowed(&transcript), 0)
+                                                    } else {
+                                                        crate::terminology::corrector::apply_terminology_correction(
+                                                            &transcript, &rules,
+                                                        )
+                                                    }
+                                                }
+                                                None => (std::borrow::Cow::Borrowed(&transcript), 0),
+                                            }
+                                        };
+
                                         // Emit transcript update with NEW recording-relative timestamps
 
                                         let update = TranscriptUpdate {
-                                            text: transcript,
+                                            text: display_text.to_string(),
                                             timestamp: format_current_timestamp(), // Wall-clock for reference
                                             source: "Audio".to_string(),
                                             sequence_id,
@@ -217,6 +242,17 @@ pub fn start_transcription_task<R: Runtime>(
                                             audio_start_time,
                                             audio_end_time,
                                             duration: chunk_duration,
+                                            // Terminology correction
+                                            raw_text: if corrections_count > 0 {
+                                                Some(raw_text)
+                                            } else {
+                                                None
+                                            },
+                                            corrections_applied: if corrections_count > 0 {
+                                                Some(corrections_count)
+                                            } else {
+                                                None
+                                            },
                                         };
 
                                         if let Err(e) = app_clone.emit("transcript-update", &update)

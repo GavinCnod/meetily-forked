@@ -1,0 +1,11 @@
+original,replacement,language,priority,category,description
+MSDS,Material Safety Data Sheet,en,high,chemical,Safety data sheet
+CAS,CAS Registry Number,en,high,cas_number,Chemical Abstracts Service
+TDI,Toluene Diisocyanate (TDI),en,high,chemical,Toluene diisocyanate
+MDI,Methylene Diphenyl Diisocyanate (MDI),en,high,chemical,Diphenylmethane diisocyanate
+VOC,Volatile Organic Compound (VOC),en,high,chemical,Volatile organic compounds
+PPE,Personal Protective Equipment (PPE),en,high,general,Safety equipment
+GHS,Globally Harmonized System (GHS),en,high,ghs_code,Chemical classification standard
+UN Number,UN Dangerous Goods Number,en,high,un_number,Dangerous goods identifier
+LEL,Lower Explosive Limit (LEL),en,high,chemical,Explosion safety
+PEL,Permissible Exposure Limit (PEL),en,high,chemical,Occupational exposure

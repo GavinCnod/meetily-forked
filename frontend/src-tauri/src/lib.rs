@@ -52,6 +52,7 @@ pub mod openrouter;
 pub mod parakeet_engine;
 pub mod state;
 pub mod summary;
+pub mod terminology;
 pub mod tray;
 pub mod utils;
 pub mod whisper_engine;
@@ -519,6 +520,7 @@ pub fn run() {
         )) as NotificationManagerState<tauri::Wry>)
         .manage(audio::init_system_audio_state())
         .manage(summary::summary_engine::ModelManagerState(Arc::new(tokio::sync::Mutex::new(None))))
+        .manage(terminology::cache::TerminologyCacheState::new())
         .setup(|_app| {
             log::info!("Application setup complete");
 
@@ -603,6 +605,18 @@ pub fn run() {
                     log::error!("Failed to initialize Parakeet engine on startup: {}", e);
                 }
             });
+
+            // Initialize terminology cache on startup (after DB is ready)
+            {
+                let app_handle = _app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let db = app_handle.state::<state::AppState>().db_manager.clone();
+                    let cache_state = app_handle.state::<terminology::cache::TerminologyCacheState>();
+                    if let Err(e) = terminology::cache::refresh_all_caches(db.pool(), &cache_state).await {
+                        log::warn!("Terminology cache init failed (non-blocking): {}", e);
+                    }
+                });
+            }
 
             // Initialize bundled templates directory for dynamic template discovery
             log::info!("Initializing bundled templates directory...");
@@ -840,6 +854,26 @@ pub fn run() {
             get_models_folder,
             set_models_folder,
             get_default_models_folder,
+            // Terminology commands (Phase 1A)
+            terminology::commands::get_terminology_list,
+            terminology::commands::save_terminology_entry,
+            terminology::commands::delete_terminology_entry,
+            terminology::commands::enable_package,
+            terminology::commands::disable_package,
+            terminology::commands::rollback_import_batch,
+            terminology::commands::refresh_all_terminology_caches,
+            terminology::commands::compute_terminology_snapshot_hash,
+            terminology::commands::run_llm_terminology_correction,
+            terminology::commands::get_l3_job_status,
+            terminology::commands::retry_l3_correction,
+            terminology::commands::get_corrections_for_meeting,
+            terminology::commands::accept_correction,
+            terminology::commands::accept_correction_for_term,
+            terminology::commands::reject_correction,
+            terminology::commands::get_terminology_settings,
+            terminology::commands::set_terminology_settings,
+            terminology::commands::save_transcript_with_terminology,
+            terminology::commands::import_terminology_csv,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -11,6 +11,7 @@ import { indexedDBService } from '@/services/indexedDBService';
 interface TranscriptContextType {
   transcripts: Transcript[];
   transcriptsRef: MutableRefObject<Transcript[]>
+  rawTranscriptsRef: MutableRefObject<Transcript[]>
   addTranscript: (update: TranscriptUpdate) => void;
   copyTranscript: () => void;
   flushBuffer: () => void;
@@ -34,6 +35,7 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
 
   // Refs for transcript management
   const transcriptsRef = useRef<Transcript[]>(transcripts);
+  const rawTranscriptsRef = useRef<Transcript[]>([]);
   const isUserAtBottomRef = useRef<boolean>(true);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const finalFlushRef = useRef<(() => void) | null>(null);
@@ -41,6 +43,8 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
   // Keep ref updated with current transcripts
   useEffect(() => {
     transcriptsRef.current = transcripts;
+    // Maintain raw transcripts list (only those with raw_text differing from text)
+    rawTranscriptsRef.current = transcripts.filter(t => t.raw_text && t.raw_text !== t.text);
   }, [transcripts]);
 
   // Smart auto-scroll: Track user scroll position
@@ -315,6 +319,9 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
             audio_start_time: update.audio_start_time,
             audio_end_time: update.audio_end_time,
             duration: update.duration,
+            // Terminology correction: preserve raw STT output
+            raw_text: update.raw_text,
+            corrections_applied: update.corrections_applied,
           };
 
           // Add to buffer
@@ -424,6 +431,8 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
       audio_start_time: update.audio_start_time,
       audio_end_time: update.audio_end_time,
       duration: update.duration,
+      raw_text: update.raw_text,
+      corrections_applied: update.corrections_applied,
     };
 
     setTranscripts(prev => {
@@ -512,6 +521,7 @@ export function TranscriptProvider({ children }: { children: ReactNode }) {
   const value: TranscriptContextType = {
     transcripts,
     transcriptsRef,
+    rawTranscriptsRef,
     addTranscript,
     copyTranscript,
     flushBuffer,

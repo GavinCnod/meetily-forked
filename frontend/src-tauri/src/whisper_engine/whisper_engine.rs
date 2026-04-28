@@ -2,7 +2,7 @@
 
 use std::path::{PathBuf};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
 use serde::{Serialize, Deserialize};
@@ -11,6 +11,18 @@ use reqwest::Client;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use crate::config::WHISPER_MODEL_CATALOG;
+
+/// Global L1 initial_prompt for Whisper soft token biasing.
+/// Set by the terminology cache refresh and consumed by transcribe_audio_with_confidence.
+static L1_PROMPT: Mutex<String> = Mutex::new(String::new());
+
+/// Update the global L1 initial_prompt for Whisper transcription.
+/// Called by terminology cache refresh to push the latest prompt.
+pub fn set_l1_prompt(prompt: String) {
+    if let Ok(mut guard) = L1_PROMPT.lock() {
+        *guard = prompt;
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ModelStatus {
@@ -573,6 +585,12 @@ impl WhisperEngine {
             // Removed debug log to reduce I/O overhead in transcription hot path
         }
 
+        // L1: Set initial_prompt from terminology cache for soft token biasing
+        let l1_prompt = L1_PROMPT.lock().unwrap().clone();
+        if !l1_prompt.is_empty() {
+            params.set_initial_prompt(&l1_prompt);
+        }
+
         let duration_seconds = audio_data.len() as f64 / 16000.0;
         let is_partial = duration_seconds < 15.0; // Consider chunks under 15s as partial
 
@@ -686,6 +704,12 @@ impl WhisperEngine {
 
         // Note: compression_ratio_threshold would be ideal but not available in current whisper-rs
         // This would help detect repetitive outputs: params.set_compression_ratio_threshold(2.4);
+
+        // L1: Set initial_prompt from terminology cache for soft token biasing
+        let l1_prompt = L1_PROMPT.lock().unwrap().clone();
+        if !l1_prompt.is_empty() {
+            params.set_initial_prompt(&l1_prompt);
+        }
 
         // Duration-based optimization is handled by beam search parameters
         let duration_seconds = audio_data.len() as f64 / 16000.0; // Assuming 16kHz

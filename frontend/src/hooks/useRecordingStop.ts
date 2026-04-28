@@ -249,11 +249,28 @@ export function useRecordingStop(
         });
 
         try {
-          const responseData = await storageService.saveMeeting(
-            savedMeetingName || meetingTitle || 'New Meeting',  // PREFER savedMeetingName (backend source)
-            freshTranscripts,
-            folderPath
-          );
+          // Check if any transcripts have raw_text (terminology correction was active)
+          const hasRawText = freshTranscripts.some((t: any) => t.raw_text && t.raw_text !== t.text);
+
+          let responseData: { meeting_id: string; status: string; message: string };
+
+          if (hasRawText) {
+            // Use terminology-aware save to preserve raw STT output
+            const { terminologyService } = await import('@/services/terminologyService');
+            responseData = await terminologyService.saveMeetingWithTerminology(
+              savedMeetingName || meetingTitle || 'New Meeting',
+              freshTranscripts,
+              folderPath,
+              null, // snapshot hash - computed backend-side
+              null  // L1 prompt snapshot
+            );
+          } else {
+            responseData = await storageService.saveMeeting(
+              savedMeetingName || meetingTitle || 'New Meeting',
+              freshTranscripts,
+              folderPath
+            );
+          }
 
           const meetingId = responseData.meeting_id;
           if (!meetingId) {

@@ -1,0 +1,21 @@
+original,replacement,language,priority,category,description
+ポリウレタン,ポリウレタン,ja,high,chemical,Polyurethane - 聚氨酯
+メチルエチルケトン,メチルエチルケトン,ja,high,chemical,MEK - 甲基乙基酮
+トルエンジイソシアネート,トルエンジイソシアネート,ja,high,chemical,TDI - 甲苯二异氰酸酯
+ジフェニルメタンジイソシアネート,ジフェニルメタンジイソシアネート,ja,high,chemical,MDI - 二苯基甲烷二异氰酸酯
+ヘキサメチレンジイソシアネート,ヘキサメチレンジイソシアネート,ja,high,chemical,HDI - 六亚甲基二异氰酸酯
+ポリオール,ポリオール,ja,high,chemical,Polyol - 多元醇
+イソシアネート,イソシアネート,ja,high,chemical,Isocyanate - 异氰酸酯
+ホルムアルデヒド,ホルムアルデヒド,ja,high,chemical,Formaldehyde - 甲醛
+アクリロニトリル,アクリロニトリル,ja,high,chemical,Acrylonitrile - 丙烯腈
+エチレンオキシド,エチレンオキシド,ja,high,chemical,Ethylene oxide - 环氧乙烷
+ベンゼン,ベンゼン,ja,high,chemical,Benzene - 苯
+スチレン,スチレン,ja,high,chemical,Styrene - 苯乙烯
+塩化ビニル,塩化ビニル,ja,high,chemical,Vinyl chloride - 氯乙烯
+アスベスト,アスベスト,ja,high,chemical,Asbestos - 石棉
+水酸化ナトリウム,水酸化ナトリウム,ja,high,chemical,Sodium hydroxide - 氢氧化钠
+硫酸,硫酸,ja,high,chemical,Sulfuric acid - 硫酸
+塩酸,塩酸,ja,high,chemical,Hydrochloric acid - 盐酸
+硝酸,硝酸,ja,high,chemical,Nitric acid - 硝酸
+過酸化水素,過酸化水素,ja,high,chemical,Hydrogen peroxide - 过氧化氢
+シアン化水素,シアン化水素,ja,high,chemical,Hydrogen cyanide - 氰化氢

@@ -107,6 +107,57 @@ impl Setting {
     }
 }
 
+// ── Terminology Models ──
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct TerminologyEntry {
+    pub id: String,
+    pub original: String,
+    pub replacement: String,
+    pub language: String,
+    pub case_sensitive: i64,
+    pub whole_word: i64,
+    pub enabled: i64,
+    pub priority: String,
+    pub category: String,
+    pub description: Option<String>,
+    pub source_type: String,
+    pub package_id: Option<String>,
+    pub package_name: Option<String>,
+    pub import_batch_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct L3CorrectionJob {
+    pub id: String,
+    pub meeting_id: String,
+    pub status: String,         // queued | running | done | failed | timeout
+    pub error_detail: Option<String>,
+    pub attempt_count: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct TranscriptCorrection {
+    pub id: String,
+    pub meeting_id: String,
+    pub job_id: String,
+    pub original_span: String,
+    pub suggested_text: String,
+    pub occurrences_json: Option<String>,
+    pub language: Option<String>,
+    pub correction_type: String,
+    pub reason: Option<String>,
+    pub source_snapshot_hash: Option<String>,
+    pub status: String,         // pending | accepted | rejected | obsolete
+    pub reviewed_by: Option<String>,
+    pub reviewed_at: Option<String>,
+    pub created_at: String,
+}
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct TranscriptSetting {
     pub id: String,

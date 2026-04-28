@@ -16,6 +16,9 @@ export interface Transcript {
   audio_start_time?: number; // Seconds from recording start (e.g., 125.3)
   audio_end_time?: number;   // Seconds from recording start (e.g., 128.6)
   duration?: number;          // Segment duration in seconds (e.g., 3.3)
+  // Terminology correction (Phase 1A)
+  raw_text?: string;
+  corrections_applied?: number;
 }
 
 export interface TranscriptUpdate {
@@ -30,6 +33,70 @@ export interface TranscriptUpdate {
   audio_start_time: number; // Seconds from recording start
   audio_end_time: number;   // Seconds from recording start
   duration: number;          // Segment duration in seconds
+  // Terminology correction (Phase 1A)
+  raw_text?: string;
+  corrections_applied?: number;
+}
+
+export interface CharRange {
+  start: number; // Unicode scalar value index
+  end: number;
+}
+
+export interface TerminologyEntry {
+  id: string;
+  original: string;
+  replacement: string;
+  language: string;
+  case_sensitive: number;
+  whole_word: number;
+  enabled: number;
+  priority: string;
+  category: string;
+  description: string | null;
+  source_type: string;
+  package_id: string | null;
+  package_name: string | null;
+  import_batch_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type L3JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'timeout';
+export type CorrectionStatus = 'pending' | 'accepted' | 'rejected' | 'obsolete';
+
+export interface L3CorrectionJob {
+  id: string;
+  meeting_id: string;
+  status: L3JobStatus;
+  error_detail: string | null;
+  attempt_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TranscriptCorrection {
+  id: string;
+  meeting_id: string;
+  job_id: string;
+  original_span: string;
+  suggested_text: string;
+  occurrences_json: string | null;
+  language: string | null;
+  correction_type: string;
+  reason: string | null;
+  source_snapshot_hash: string | null;
+  status: CorrectionStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface TerminologySettings {
+  terminology_enabled: boolean;
+  initial_prompt_enabled: boolean;
+  llm_correction_enabled: boolean;
+  llm_correction_auto_accept: boolean;
 }
 
 export interface Block {

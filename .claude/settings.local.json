@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"initial_prompt\\\\|set_initial_prompt\" Cargo.lock)",
+      "Bash(grep -A2 'name = \"whisper-rs\"' Cargo.lock)",
+      "Bash(cargo metadata *)",
+      "Bash(cargo add *)",
+      "Bash(cargo check *)"
+    ]
+  }
+}
