@@ -126,29 +126,11 @@ pub async fn compute_terminology_snapshot_hash(
 // ── L3 Queue ──
 
 #[tauri::command]
-pub async fn run_llm_terminology_correction(
-    state: State<'_, AppState>,
+pub async fn run_llm_terminology_correction<R: tauri::Runtime>(
+    app: AppHandle<R>,
     meeting_id: String,
 ) -> Result<String, String> {
-    // Power-on self test: check if L3 is enabled in settings
-    let _pool = state.db_manager.pool();
-
-    // Idempotent check - don't re-queue if already active
-    if let Some(job) = TerminologyRepository::find_active_l3_job(_pool, &meeting_id)
-        .await
-        .map_err(|e| format!("DB error: {}", e))?
-    {
-        info!("L3 job already queued/running for meeting {}", meeting_id);
-        return Ok(job.id);
-    }
-
-    let job_id = Uuid::new_v4().to_string();
-    TerminologyRepository::insert_l3_job(_pool, &job_id, &meeting_id, "queued")
-        .await
-        .map_err(|e| format!("Failed to enqueue L3 job: {}", e))?;
-
-    info!("L3 correction job {} queued for meeting {}", job_id, meeting_id);
-    Ok(job_id)
+    super::queue::enqueue_l3_correction(app, meeting_id).await
 }
 
 #[tauri::command]

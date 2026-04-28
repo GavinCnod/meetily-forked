@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import { TranscriptPanel } from '@/components/MeetingDetails/TranscriptPanel';
 import { SummaryPanel } from '@/components/MeetingDetails/SummaryPanel';
 import { ModelConfig } from '@/components/ModelSettingsModal';
+import { L3QueueStatus } from '@/components/CorrectionDiff/QueueStatus';
+import { CorrectionDiffView } from '@/components/CorrectionDiff/DiffView';
 
 // Custom hooks
 import { useMeetingData } from '@/hooks/meeting-details/useMeetingData';
@@ -192,6 +194,11 @@ export default function PageContent({
           meetingFolderPath={meeting.folder_path}
           onRefetchTranscripts={onRefetchTranscripts}
         />
+        {/* L3 Terminology Correction UI */}
+        <div className="border-t bg-background px-3 py-2">
+          <L3QueueStatus meetingId={meeting.id} />
+          <CorrectionDiffView meetingId={meeting.id} />
+        </div>
         <SummaryPanel
           meeting={meeting}
           meetingTitle={meetingData.meetingTitle}

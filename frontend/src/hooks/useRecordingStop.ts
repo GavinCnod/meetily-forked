@@ -285,6 +285,16 @@ export function useRecordingStop(
           // Mark meeting as saved in IndexedDB (for recovery system)
           await markMeetingAsSaved();
 
+          // Trigger L3 LLM correction asynchronously (non-blocking)
+          try {
+            const { terminologyService } = await import('@/services/terminologyService');
+            terminologyService.runL3Correction(meetingId).catch(() => {
+              // L3 is best-effort, don't block the user
+            });
+          } catch {
+            // L3 service not available or error
+          }
+
           // Clean up session storage
           sessionStorage.removeItem('last_recording_folder_path');
           sessionStorage.removeItem('last_recording_meeting_name');

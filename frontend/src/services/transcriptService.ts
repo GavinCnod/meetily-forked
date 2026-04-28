@@ -111,6 +111,15 @@ export class TranscriptService {
       callback(event.payload.modelName);
     });
   }
+
+  /**
+   * Listen for L3 LLM corrections ready event
+   */
+  async onL3CorrectionsReady(callback: (payload: { meeting_id: string; job_id: string; suggestion_count: number }) => void): Promise<UnlistenFn> {
+    return listen<{ meeting_id: string; job_id: string; suggestion_count: number }>('llm-corrections-ready', (event) => {
+      callback(event.payload);
+    });
+  }
 }
 
 // Export singleton instance

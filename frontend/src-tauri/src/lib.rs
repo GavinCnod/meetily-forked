@@ -615,6 +615,10 @@ pub fn run() {
                     if let Err(e) = terminology::cache::refresh_all_caches(db.pool(), &cache_state).await {
                         log::warn!("Terminology cache init failed (non-blocking): {}", e);
                     }
+                    // Recover pending L3 jobs after cache is ready
+                    if let Err(e) = terminology::queue::recover_pending_tasks(&app_handle).await {
+                        log::warn!("L3 task recovery failed: {}", e);
+                    }
                 });
             }
 
