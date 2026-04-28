@@ -197,7 +197,13 @@ export default function PageContent({
         {/* L3 Terminology Correction UI */}
         <div className="border-t bg-background px-3 py-2">
           <L3QueueStatus meetingId={meeting.id} />
-          <CorrectionDiffView meetingId={meeting.id} />
+          <CorrectionDiffView
+            meetingId={meeting.id}
+            onRequestRegenerateSummary={() => {
+              // Trigger summary regeneration with corrected transcript text
+              summaryGeneration.handleGenerateSummary();
+            }}
+          />
         </div>
         <SummaryPanel
           meeting={meeting}

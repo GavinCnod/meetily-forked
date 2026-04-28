@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { Check, X, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, X, AlertTriangle, ChevronDown, ChevronRight, RefreshCw, FileDown } from 'lucide-react';
 import { terminologyService } from '@/services/terminologyService';
 import type { TranscriptCorrection } from '@/types';
 
 interface Props {
   meetingId: string;
   onCorrectionAccepted?: () => void;
+  onRequestRegenerateSummary?: () => void;
 }
 
 interface TermGroup {
@@ -19,8 +20,10 @@ interface TermGroup {
 
 const HIGH_RISK_TYPES = ['ghs_code', 'cas_number', 'un_number'];
 
-export function CorrectionDiffView({ meetingId, onCorrectionAccepted }: Props) {
+export function CorrectionDiffView({ meetingId, onCorrectionAccepted, onRequestRegenerateSummary }: Props) {
   const [corrections, setCorrections] = useState<TranscriptCorrection[]>([]);
+  const [applying, setApplying] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [accepting, setAccepting] = useState<Set<string>>(new Set());
@@ -127,6 +130,38 @@ export function CorrectionDiffView({ meetingId, onCorrectionAccepted }: Props) {
     }
   };
 
+  const handleApplyAndRegenerate = async () => {
+    setApplying(true);
+    try {
+      await terminologyService.applyAcceptedCorrections(meetingId);
+      await fetchCorrections();
+      onRequestRegenerateSummary?.();
+    } catch {
+      // ignore
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleExportAudit = async () => {
+    setExporting(true);
+    try {
+      const report = await terminologyService.exportAuditReport(meetingId);
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-${meetingId}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const acceptedCount = corrections.filter(c => c.status === 'accepted').length;
   const pendingCount = corrections.filter(c => c.status === 'pending').length;
 
   if (loading) {
@@ -147,12 +182,34 @@ export function CorrectionDiffView({ meetingId, onCorrectionAccepted }: Props) {
 
   return (
     <div className="space-y-3 p-1">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <AlertTriangle className="w-4 h-4 text-amber-500" />
-        L3 Deep Correction Suggestions ({pendingCount} pending)
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <AlertTriangle className="w-4 h-4 text-amber-500" />
+          L3 Correction ({pendingCount} pending{acceptedCount > 0 ? `, ${acceptedCount} accepted` : ''})
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportAudit}
+            disabled={exporting}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-xs border hover:bg-muted transition-colors"
+          >
+            <FileDown className="w-3 h-3" />
+            {exporting ? 'Exporting...' : 'Audit Report'}
+          </button>
+          {acceptedCount > 0 && (
+            <button
+              onClick={handleApplyAndRegenerate}
+              disabled={applying}
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+            >
+              <RefreshCw className={`w-3 h-3 ${applying ? 'animate-spin' : ''}`} />
+              {applying ? 'Applying...' : 'Apply & Regenerate Summary'}
+            </button>
+          )}
+        </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        The following suggestions are based on full-text matching. If only some occurrences need correction, expand and review individually.
+        The following suggestions are based on full-text matching. Review each occurrence carefully.
       </p>
 
       {groups.map(group => {

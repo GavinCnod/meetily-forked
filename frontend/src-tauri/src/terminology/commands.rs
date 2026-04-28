@@ -237,16 +237,40 @@ pub struct ImportResult {
 pub async fn import_terminology_csv(
     state: tauri::State<'_, AppState>,
     csv_content: String,
+    file_bytes: Option<Vec<u8>>,
 ) -> Result<ImportResult, String> {
     let mut new_count: u64 = 0;
     let mut updated_count: u64 = 0;
     let mut errors: Vec<String> = Vec::new();
     let batch_id = Uuid::new_v4().to_string();
 
-    // Strip UTF-8 BOM if present
-    let content = csv_content
-        .strip_prefix('\u{FEFF}')
-        .unwrap_or(&csv_content);
+    // If raw bytes are provided, try Shift-JIS detection first
+    let content = if let Some(bytes) = file_bytes {
+        // Strip UTF-8 BOM if present
+        let bytes = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+            bytes[3..].to_vec()
+        } else {
+            bytes
+        };
+
+        // Try UTF-8 first
+        if let Ok(utf8_str) = std::str::from_utf8(&bytes) {
+            utf8_str.to_string()
+        } else {
+            // Try Shift-JIS
+            let (decoded, _encoding, had_errors) = encoding_rs::SHIFT_JIS.decode(&bytes);
+            if had_errors {
+                info!("Shift-JIS decode had replacement characters, some content may be garbled");
+            }
+            decoded.into_owned()
+        }
+    } else {
+        // Strip UTF-8 BOM from text input
+        csv_content
+            .strip_prefix('\u{FEFF}')
+            .unwrap_or(&csv_content)
+            .to_string()
+    };
 
     let mut reader = csv::ReaderBuilder::new()
         .flexible(true)
@@ -414,6 +438,162 @@ pub async fn save_transcript_with_terminology<R: tauri::Runtime>(
             Err(format!("Failed to save transcript: {}", e))
         }
     }
+}
+
+// ── Audit Export ──
+
+#[derive(serde::Serialize)]
+pub struct AuditReport {
+    pub meeting_title: String,
+    pub exported_at: String,
+    pub terminology_snapshot_hash: String,
+    pub l1_prompt_snapshot: Option<String>,
+    pub total_segments: usize,
+    pub corrected_segments: usize,
+    pub l3_corrections: Vec<TranscriptCorrection>,
+    pub transcript_data: Vec<AuditSegment>,
+}
+
+#[derive(serde::Serialize)]
+pub struct AuditSegment {
+    pub display_text: String,
+    pub raw_text: Option<String>,
+    pub corrections: u32,
+    pub timestamp: Option<f64>,
+}
+
+#[tauri::command]
+pub async fn export_audit_report(
+    state: tauri::State<'_, AppState>,
+    meeting_id: String,
+) -> Result<AuditReport, String> {
+    let pool = state.db_manager.pool();
+
+    // Get meeting info
+    let meeting: Option<(String, String)> = sqlx::query_as(
+        "SELECT id, title FROM meetings WHERE id = ?"
+    )
+    .bind(&meeting_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?
+    .map(|(id, title): (String, String)| (id, title));
+
+    let (_, meeting_title) = meeting.ok_or("Meeting not found")?;
+
+    // Get transcript segments with raw/corrected data
+    let segments: Vec<(String, Option<String>, Option<f64>)> = sqlx::query_as(
+        "SELECT transcript, raw_transcript, audio_start_time FROM transcripts WHERE meeting_id = ? ORDER BY timestamp"
+    )
+    .bind(&meeting_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?;
+
+    let mut audit_segments = Vec::new();
+    let mut corrected_count = 0;
+    let snapshot_hash = String::new(); // Will be populated from the first segment that has it
+
+    for (text, raw, audio_start) in &segments {
+        let has_raw = raw.as_ref().map_or(false, |r| !r.is_empty() && r != text);
+        if has_raw {
+            corrected_count += 1;
+        }
+        audit_segments.push(AuditSegment {
+            display_text: text.clone(),
+            raw_text: raw.clone(),
+            corrections: if has_raw { 1 } else { 0 },
+            timestamp: *audio_start,
+        });
+    }
+
+    // Get L3 corrections
+    let l3_corrections = TerminologyRepository::get_corrections_for_meeting(pool, &meeting_id)
+        .await
+        .unwrap_or_default();
+
+    // Get snapshot hash from transcript records
+    let snapshot: Option<(String,)> = sqlx::query_as(
+        "SELECT terminology_snapshot_hash FROM transcripts WHERE meeting_id = ? AND terminology_snapshot_hash IS NOT NULL LIMIT 1"
+    )
+    .bind(&meeting_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?
+    .map(|(h,)| (h,));
+
+    let l1_snapshot: Option<(String,)> = sqlx::query_as(
+        "SELECT l1_prompt_snapshot FROM transcripts WHERE meeting_id = ? AND l1_prompt_snapshot IS NOT NULL LIMIT 1"
+    )
+    .bind(&meeting_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?
+    .map(|(h,)| (h,));
+
+    Ok(AuditReport {
+        meeting_title,
+        exported_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        terminology_snapshot_hash: snapshot.map(|(h,)| h).unwrap_or_default(),
+        l1_prompt_snapshot: l1_snapshot.map(|(h,)| h),
+        total_segments: segments.len(),
+        corrected_segments: corrected_count,
+        l3_corrections,
+        transcript_data: audit_segments,
+    })
+}
+
+// ── Apply Corrections (update transcript text) ──
+
+#[tauri::command]
+pub async fn apply_accepted_corrections(
+    state: tauri::State<'_, AppState>,
+    meeting_id: String,
+) -> Result<u64, String> {
+    let pool = state.db_manager.pool();
+
+    // Get all accepted corrections for this meeting
+    let accepted: Vec<TranscriptCorrection> = TerminologyRepository::get_corrections_for_meeting(pool, &meeting_id)
+        .await
+        .map_err(|e| format!("DB error: {}", e))?
+        .into_iter()
+        .filter(|c| c.status == "accepted")
+        .collect();
+
+    if accepted.is_empty() {
+        return Ok(0);
+    }
+
+    let mut updated: u64 = 0;
+
+    // Update each transcript segment with the applied corrections
+    for correction in &accepted {
+        let result = sqlx::query(
+            "UPDATE transcripts SET transcript = REPLACE(transcript, ?, ?) WHERE meeting_id = ?"
+        )
+        .bind(&correction.original_span)
+        .bind(&correction.suggested_text)
+        .bind(&meeting_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to apply correction: {}", e))?;
+
+        updated += result.rows_affected();
+    }
+
+    // Mark corrections as applied (obsolete pending ones)
+    TerminologyRepository::obsoletize_corrections(pool, &meeting_id)
+        .await
+        .map_err(|e| format!("Failed to obsoletize: {}", e))?;
+
+    info!(
+        "Applied {} accepted corrections to {} transcript segments for meeting {}",
+        accepted.len(),
+        updated,
+        meeting_id
+    );
+
+    Ok(updated)
 }
 
 // ── Settings ──

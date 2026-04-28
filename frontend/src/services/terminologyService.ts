@@ -39,13 +39,13 @@ export class TerminologyService {
 
   // ── CSV Import ──
 
-  async importCSV(csvContent: string): Promise<{
+  async importCSV(csvContent: string, fileBytes?: number[]): Promise<{
     batch_id: string;
     new_count: number;
     updated_count: number;
     errors: string[];
   }> {
-    return invoke('import_terminology_csv', { csvContent });
+    return invoke('import_terminology_csv', { csvContent, fileBytes });
   }
 
   // ── Save with Terminology ──
@@ -126,6 +126,16 @@ export class TerminologyService {
 
   async rejectCorrection(correctionId: string): Promise<void> {
     return invoke<void>('reject_correction', { correctionId });
+  }
+
+  // ── Audit & Apply ──
+
+  async exportAuditReport(meetingId: string): Promise<any> {
+    return invoke('export_audit_report', { meetingId });
+  }
+
+  async applyAcceptedCorrections(meetingId: string): Promise<number> {
+    return invoke<number>('apply_accepted_corrections', { meetingId });
   }
 }
 

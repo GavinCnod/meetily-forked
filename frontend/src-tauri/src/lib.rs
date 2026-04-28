@@ -878,6 +878,8 @@ pub fn run() {
             terminology::commands::set_terminology_settings,
             terminology::commands::save_transcript_with_terminology,
             terminology::commands::import_terminology_csv,
+            terminology::commands::export_audit_report,
+            terminology::commands::apply_accepted_corrections,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

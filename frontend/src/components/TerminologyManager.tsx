@@ -134,7 +134,9 @@ export function TerminologyManager() {
     if (!file) return;
     try {
       const text = await file.text();
-      const result = await terminologyService.importCSV(text);
+      const buffer = await file.arrayBuffer();
+      const bytes = Array.from(new Uint8Array(buffer));
+      const result = await terminologyService.importCSV(text, bytes);
       setImportResult(
         `Imported: ${result.new_count} new, ${result.updated_count} updated` +
         (result.errors.length > 0 ? `. ${result.errors.length} errors.` : '')
