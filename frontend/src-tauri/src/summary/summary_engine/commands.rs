@@ -1,6 +1,7 @@
 // Tauri commands for built-in AI model management
 // Exposes model download, status, and management functionality to frontend
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
@@ -338,6 +339,23 @@ pub async fn init_model_manager_at_startup<R: Runtime>(
         .join("models")
         .join("summary");
 
+    init_model_manager_with_dir(app, models_dir).await
+}
+
+/// Initialize model manager with an explicit models root directory
+/// The "summary" subfolder is appended automatically
+pub async fn init_model_manager_with_root<R: Runtime>(
+    app: &AppHandle<R>,
+    models_root: PathBuf,
+) -> Result<(), String> {
+    let models_dir = models_root.join("summary");
+    init_model_manager_with_dir(app, models_dir).await
+}
+
+async fn init_model_manager_with_dir<R: Runtime>(
+    app: &AppHandle<R>,
+    models_dir: PathBuf,
+) -> Result<(), String> {
     let manager = ModelManager::new_with_models_dir(Some(models_dir))
         .map_err(|e| format!("Failed to create ModelManager: {}", e))?;
 

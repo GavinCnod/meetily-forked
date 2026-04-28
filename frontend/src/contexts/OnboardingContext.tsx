@@ -43,6 +43,9 @@ interface OnboardingContextType {
   selectedSummaryModel: string;
   databaseExists: boolean;
   isBackgroundDownloading: boolean;
+  // Models folder
+  modelsFolder: string | null;
+  setModelsFolder: (path: string | null) => void;
   // Permissions
   permissions: OnboardingPermissions;
   permissionsSkipped: boolean;
@@ -86,6 +89,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [selectedSummaryModel, setSelectedSummaryModel] = useState<string>('gemma3:1b');
   const [databaseExists, setDatabaseExists] = useState(false);
   const [isBackgroundDownloading, setIsBackgroundDownloading] = useState(false);
+  const [modelsFolder, setModelsFolder] = useState<string | null>(null);
 
   // Permissions state
   const [permissions, setPermissions] = useState<OnboardingPermissions>({
@@ -115,7 +119,20 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       }
     };
     fetchRecommendation();
+
+    // Load current models folder setting
+    loadModelsFolder();
   }, []);
+
+  const loadModelsFolder = async () => {
+    try {
+      const { configService } = await import('@/services/configService');
+      const folder = await configService.getModelsFolder();
+      setModelsFolder(folder);
+    } catch (e) {
+      console.error('[OnboardingContext] Failed to load models folder:', e);
+    }
+  };
 
   // Initialize database silently in background (moved from SetupOverviewStep)
   const initializeDatabaseInBackground = async () => {
@@ -405,6 +422,17 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         saveTimeoutRef.current = undefined;
       }
 
+      // Save models folder if custom path was set during onboarding
+      if (modelsFolder) {
+        try {
+          const { configService } = await import('@/services/configService');
+          await configService.setModelsFolder(modelsFolder);
+          console.log('[OnboardingContext] Models folder saved during onboarding:', modelsFolder);
+        } catch (e) {
+          console.error('[OnboardingContext] Failed to save models folder:', e);
+        }
+      }
+
       // Onboarding always uses builtin-ai with selected model
       await invoke('complete_onboarding', {
         model: selectedSummaryModel,
@@ -517,6 +545,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         selectedSummaryModel,
         databaseExists,
         isBackgroundDownloading,
+        modelsFolder,
+        setModelsFolder,
         permissions,
         permissionsSkipped,
         goToStep,

@@ -112,6 +112,30 @@ export class ConfigService {
       model,
     });
   }
+
+  // ===== Models Folder Management =====
+
+  /**
+   * Get the current models folder path (null = default)
+   */
+  async getModelsFolder(): Promise<string | null> {
+    return invoke<string | null>('get_models_folder');
+  }
+
+  /**
+   * Set a custom models folder path
+   * @param path - Absolute path to the desired models folder
+   */
+  async setModelsFolder(path: string): Promise<void> {
+    return invoke<void>('set_models_folder', { path });
+  }
+
+  /**
+   * Get the default models folder path (for display)
+   */
+  async getDefaultModelsFolder(): Promise<string> {
+    return invoke<string>('get_default_models_folder');
+  }
 }
 
 // Export singleton instance

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex as StdMutex;
 // Removed unused import
@@ -387,6 +388,122 @@ pub fn get_language_preference_internal() -> Option<String> {
     LANGUAGE_PREFERENCE.lock().ok().map(|lang| lang.clone())
 }
 
+// ============================================================================
+// Models Folder Management
+// ============================================================================
+
+/// Resolve custom models root directory from settings.
+/// Returns Some(path) if a custom folder is configured, None if default should be used.
+async fn resolve_custom_models_root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
+    use crate::database::repositories::setting::SettingsRepository;
+
+    if let Some(app_state) = app.try_state::<state::AppState>() {
+        let pool = app_state.db_manager.pool();
+        match SettingsRepository::get_models_folder(pool).await {
+            Ok(Some(custom)) if !custom.is_empty() => {
+                let path = PathBuf::from(&custom);
+                if let Err(e) = std::fs::create_dir_all(&path) {
+                    log::warn!("Failed to create custom models folder '{}': {}, using default", custom, e);
+                    return None;
+                }
+                log::info!("Using custom models folder: {}", path.display());
+                return Some(path);
+            }
+            Ok(_) => {
+                log::info!("No custom models folder set, using default layout");
+            }
+            Err(e) => {
+                log::warn!("Failed to read models_folder from settings: {}", e);
+            }
+        }
+    } else {
+        log::info!("AppState not yet available (first launch), using default layout");
+    }
+
+    None
+}
+
+#[tauri::command]
+async fn get_models_folder(
+    app: AppHandle,
+    state: tauri::State<'_, state::AppState>,
+) -> Result<Option<String>, String> {
+    use crate::database::repositories::setting::SettingsRepository;
+    let pool = state.db_manager.pool();
+    SettingsRepository::get_models_folder(pool)
+        .await
+        .map_err(|e| format!("Failed to get models folder: {}", e))
+}
+
+#[tauri::command]
+async fn set_models_folder(
+    app: AppHandle,
+    state: tauri::State<'_, state::AppState>,
+    path: String,
+) -> Result<(), String> {
+    use crate::database::repositories::setting::SettingsRepository;
+
+    let custom_path = PathBuf::from(&path);
+
+    // Validate and create directory
+    if !custom_path.exists() {
+        std::fs::create_dir_all(&custom_path)
+            .map_err(|e| format!("Failed to create directory '{}': {}", path, e))?;
+    }
+
+    if !custom_path.is_dir() {
+        return Err(format!("'{}' is not a directory", path));
+    }
+
+    // Save to settings
+    let pool = state.db_manager.pool();
+    SettingsRepository::save_models_folder(pool, Some(&path))
+        .await
+        .map_err(|e| format!("Failed to save models folder: {}", e))?;
+
+    log::info!("Models folder changed to: {}", path);
+
+    // Re-initialize all engines with the new path
+    whisper_engine::commands::set_models_directory_from_path(custom_path.clone());
+    tauri::async_runtime::spawn(async {
+        if let Err(e) = whisper_engine::commands::whisper_init().await {
+            log::error!("Failed to re-init Whisper after folder change: {}", e);
+        }
+    });
+
+    parakeet_engine::commands::set_models_directory_from_path(custom_path.clone());
+    tauri::async_runtime::spawn(async {
+        if let Err(e) = parakeet_engine::commands::parakeet_init().await {
+            log::error!("Failed to re-init Parakeet after folder change: {}", e);
+        }
+    });
+
+    let summary_root = custom_path;
+    let app_for_summary = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = summary::summary_engine::commands::init_model_manager_with_root(
+            &app_for_summary, summary_root,
+        ).await {
+            log::error!("Failed to re-init ModelManager after folder change: {}", e);
+        }
+    });
+
+    // Notify frontend
+    if let Err(e) = app.emit("models-folder-changed", &path) {
+        log::error!("Failed to emit models-folder-changed event: {}", e);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_default_models_folder(app: AppHandle) -> Result<String, String> {
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    let default_path = app_data_dir.join("models");
+    Ok(default_path.to_string_lossy().to_string())
+}
+
 pub fn run() {
     log::set_max_level(log::LevelFilter::Info);
 
@@ -436,8 +553,42 @@ pub fn run() {
                 }
             });
 
-            // Set models directory to use app_data_dir (unified storage location)
-            whisper_engine::commands::set_models_directory(&_app.handle());
+            // Initialize database (handles first launch detection and conditional setup)
+            tauri::async_runtime::block_on(async {
+                database::setup::initialize_database_on_startup(&_app.handle()).await
+            })
+            .expect("Failed to initialize database");
+
+            // Resolve models directory: custom path with subdirectories, or default flat layout
+            let custom_models_root = tauri::async_runtime::block_on(async {
+                resolve_custom_models_root(&_app.handle()).await
+            });
+
+            if let Some(custom_root) = custom_models_root {
+                // Custom path: use subdirectories to separate engine models
+                whisper_engine::commands::set_models_directory_from_path(custom_root.clone());
+                parakeet_engine::commands::set_models_directory_from_path(custom_root.clone());
+                let app_for_summary = _app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match summary::summary_engine::commands::init_model_manager_with_root(
+                        &app_for_summary, custom_root,
+                    ).await {
+                        Ok(_) => log::info!("ModelManager initialized (custom path)"),
+                        Err(e) => log::warn!("ModelManager init failed: {}", e),
+                    }
+                });
+            } else {
+                // Default: use flat model layout for backward compatibility
+                whisper_engine::commands::set_models_directory(&_app.handle());
+                parakeet_engine::commands::set_models_directory(&_app.handle());
+                let app_for_summary = _app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match summary::summary_engine::commands::init_model_manager_at_startup(&app_for_summary).await {
+                        Ok(_) => log::info!("ModelManager initialized successfully at startup"),
+                        Err(e) => log::warn!("ModelManager init failed: {}", e),
+                    }
+                });
+            }
 
             // Initialize Whisper engine on startup
             tauri::async_runtime::spawn(async {
@@ -446,43 +597,12 @@ pub fn run() {
                 }
             });
 
-            // Set Parakeet models directory
-            parakeet_engine::commands::set_models_directory(&_app.handle());
-
             // Initialize Parakeet engine on startup
             tauri::async_runtime::spawn(async {
                 if let Err(e) = parakeet_engine::commands::parakeet_init().await {
                     log::error!("Failed to initialize Parakeet engine on startup: {}", e);
                 }
             });
-
-            // Initialize ModelManager for summary engine (async, non-blocking)
-            let app_handle_for_model_manager = _app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                match summary::summary_engine::commands::init_model_manager_at_startup(&app_handle_for_model_manager).await {
-                    Ok(_) => log::info!("ModelManager initialized successfully at startup"),
-                    Err(e) => {
-                        log::warn!("Failed to initialize ModelManager at startup: {}", e);
-                        log::warn!("ModelManager will be lazy-initialized on first use");
-                    }
-                }
-            });
-
-            // Trigger system audio permission request on startup (similar to microphone permission)
-            // #[cfg(target_os = "macos")]
-            // {
-            //     tauri::async_runtime::spawn(async {
-            //         if let Err(e) = audio::permissions::trigger_system_audio_permission() {
-            //             log::warn!("Failed to trigger system audio permission: {}", e);
-            //         }
-            //     });
-            // }
-
-            // Initialize database (handles first launch detection and conditional setup)
-            tauri::async_runtime::block_on(async {
-                database::setup::initialize_database_on_startup(&_app.handle()).await
-            })
-            .expect("Failed to initialize database");
 
             // Initialize bundled templates directory for dynamic template discovery
             log::info!("Initializing bundled templates directory...");
@@ -716,6 +836,10 @@ pub fn run() {
             audio::import::start_import_audio_command,
             audio::import::cancel_import_command,
             audio::import::is_import_in_progress_command,
+            // Models folder management
+            get_models_folder,
+            set_models_folder,
+            get_default_models_folder,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

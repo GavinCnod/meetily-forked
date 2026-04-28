@@ -319,6 +319,43 @@ impl SettingsRepository {
     /// # Returns
     /// * `Ok(())` - Config saved successfully
     /// * `Err(sqlx::Error)` - Database or JSON serialization error
+    // ===== MODELS FOLDER METHODS =====
+
+    /// Gets the custom models folder path from settings
+    /// Returns None if not set (use default app_data_dir/models/)
+    pub async fn get_models_folder(
+        pool: &SqlitePool,
+    ) -> std::result::Result<Option<String>, sqlx::Error> {
+        let result: Option<String> = sqlx::query_scalar(
+            "SELECT models_folder FROM settings WHERE id = '1' LIMIT 1"
+        )
+        .fetch_optional(pool)
+        .await?
+        .flatten();
+
+        Ok(result.filter(|s| !s.is_empty()))
+    }
+
+    /// Saves the custom models folder path
+    pub async fn save_models_folder(
+        pool: &SqlitePool,
+        path: Option<&str>,
+    ) -> std::result::Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            INSERT INTO settings (id, provider, model, whisperModel, models_folder)
+            VALUES ('1', 'builtin-ai', 'gemma3:1b', 'large-v3', $1)
+            ON CONFLICT(id) DO UPDATE SET
+                models_folder = excluded.models_folder
+            "#,
+        )
+        .bind(path)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
     pub async fn save_custom_openai_config(
         pool: &SqlitePool,
         config: &CustomOpenAIConfig,

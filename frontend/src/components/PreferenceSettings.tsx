@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useRef } from "react"
 import { Switch } from "./ui/switch"
-import { FolderOpen } from "lucide-react"
+import { FolderOpen, RotateCcw, AlertTriangle } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
+import { open } from "@tauri-apps/plugin-dialog"
 import Analytics from "@/lib/analytics"
 import AnalyticsConsentSwitch from "./AnalyticsConsentSwitch"
 import { useConfig, NotificationSettings } from "@/contexts/ConfigContext"
+import { configService } from "@/services/configService
 
 export function PreferenceSettings() {
   const {
@@ -22,12 +24,30 @@ export function PreferenceSettings() {
   const [previousNotificationsEnabled, setPreviousNotificationsEnabled] = useState<boolean | null>(null);
   const hasTrackedViewRef = useRef(false);
 
+  // Models folder state
+  const [modelsFolder, setModelsFolderState] = useState<string | null>(null);
+  const [defaultModelsFolder, setDefaultModelsFolder] = useState<string>('');
+  const [showFolderWarning, setShowFolderWarning] = useState(false);
+  const [pendingFolder, setPendingFolder] = useState<string | null>(null);
+
   // Lazy load preferences on mount (only loads if not already cached)
   useEffect(() => {
     loadPreferences();
+    loadModelsFolder();
     // Reset tracking ref on mount (every tab visit)
     hasTrackedViewRef.current = false;
   }, [loadPreferences]);
+
+  const loadModelsFolder = async () => {
+    try {
+      const folder = await configService.getModelsFolder();
+      const defFolder = await configService.getDefaultModelsFolder();
+      setModelsFolderState(folder);
+      setDefaultModelsFolder(defFolder);
+    } catch (e) {
+      console.error('Failed to load models folder:', e);
+    }
+  };
 
   // Track preferences viewed analytics on every tab visit (once per mount)
   useEffect(() => {
@@ -110,6 +130,54 @@ export function PreferenceSettings() {
     handleUpdateNotificationSettings();
   }, [notificationsEnabled, notificationSettings, isInitialLoad, previousNotificationsEnabled, updateNotificationSettings])
 
+  const displayModelsFolder = modelsFolder || defaultModelsFolder;
+  const isCustomModelsFolder = modelsFolder !== null && modelsFolder !== defaultModelsFolder;
+
+  const handleSelectModelsFolder = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Models Folder',
+      });
+      if (selected && typeof selected === 'string') {
+        // Show warning before switching
+        setPendingFolder(selected);
+        setShowFolderWarning(true);
+      }
+    } catch (error) {
+      console.error('Failed to open folder picker:', error);
+    }
+  };
+
+  const handleConfirmFolderChange = async () => {
+    if (!pendingFolder) return;
+    try {
+      await configService.setModelsFolder(pendingFolder);
+      setModelsFolderState(pendingFolder);
+      setShowFolderWarning(false);
+      setPendingFolder(null);
+    } catch (error) {
+      console.error('Failed to set models folder:', error);
+    }
+  };
+
+  const handleResetModelsFolder = async () => {
+    setPendingFolder(null);
+    setShowFolderWarning(true);
+  };
+
+  const handleConfirmReset = async () => {
+    try {
+      await configService.setModelsFolder('');
+      setModelsFolderState(null);
+      setShowFolderWarning(false);
+      setPendingFolder(null);
+    } catch (error) {
+      console.error('Failed to reset models folder:', error);
+    }
+  };
+
   const handleOpenFolder = async (folderType: 'database' | 'models' | 'recordings') => {
     try {
       switch (folderType) {
@@ -182,20 +250,34 @@ export function PreferenceSettings() {
             </button>
           </div> */}
 
-          {/* Models Location */}
-          {/* <div className="p-4 border rounded-lg bg-gray-50">
-            <div className="font-medium mb-2">Whisper Models</div>
-            <div className="text-sm text-gray-600 mb-3 break-all font-mono text-xs">
-              {storageLocations?.models || 'Loading...'}
+          {/* Models Storage Location */}
+          <div className="p-4 border rounded-lg bg-gray-50">
+            <div className="font-medium mb-2">AI Models</div>
+            <div className="text-sm text-gray-600 mb-2 break-all font-mono text-xs">
+              {displayModelsFolder || 'Loading...'}
             </div>
-            <button
-              onClick={() => handleOpenFolder('models')}
-              className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
-            >
-              <FolderOpen className="w-4 h-4" />
-              Open Folder
-            </button>
-          </div> */}
+            {isCustomModelsFolder && (
+              <p className="text-xs text-amber-600 mb-2">Custom folder</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={handleSelectModelsFolder}
+                className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
+              >
+                <FolderOpen className="w-4 h-4" />
+                Change Folder
+              </button>
+              {isCustomModelsFolder && (
+                <button
+                  onClick={handleResetModelsFolder}
+                  className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors text-gray-500"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Reset to Default
+                </button>
+              )}
+            </div>
+          </div>
 
           {/* Recordings Location */}
           <div className="p-4 border rounded-lg bg-gray-50">
@@ -212,6 +294,38 @@ export function PreferenceSettings() {
             </button>
           </div>
         </div>
+
+        {/* Warning Dialog for folder change */}
+        {showFolderWarning && (
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="text-sm font-medium text-amber-800">
+                  {pendingFolder ? 'Change Models Folder?' : 'Reset to Default Folder?'}
+                </h4>
+                <p className="text-xs text-amber-700 mt-1">
+                  Models in the previous folder will not be moved. You will need to re-download models
+                  if they are not present in the new location. Existing models on disk will not be deleted.
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={pendingFolder ? handleConfirmFolderChange : handleConfirmReset}
+                    className="px-3 py-1.5 text-xs bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors"
+                  >
+                    Confirm Change
+                  </button>
+                  <button
+                    onClick={() => { setShowFolderWarning(false); setPendingFolder(null); }}
+                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 p-3 bg-blue-50 rounded-md">
           <p className="text-xs text-blue-800">

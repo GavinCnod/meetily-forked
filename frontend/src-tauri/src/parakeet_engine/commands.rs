@@ -10,18 +10,34 @@ pub static PARAKEET_ENGINE: Mutex<Option<Arc<ParakeetEngine>>> = Mutex::new(None
 // Global models directory path (set during app initialization)
 static MODELS_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-/// Initialize the models directory path using app_data_dir
-/// This should be called during app setup before parakeet_init
+/// Initialize the models directory path using default app_data_dir location.
+/// Parakeet models are stored directly in {app_data_dir}/models/ (shared with Whisper).
 pub fn set_models_directory<R: Runtime>(app: &AppHandle<R>) {
     let app_data_dir = app.path().app_data_dir()
         .expect("Failed to get app data dir");
-
     let models_dir = app_data_dir.join("models");
 
-    // Create directory if it doesn't exist
     if !models_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&models_dir) {
-            log::error!("Failed to create models directory: {}", e);
+            log::error!("Failed to create parakeet models directory: {}", e);
+            return;
+        }
+    }
+
+    log::info!("Parakeet models directory set to: {}", models_dir.display());
+
+    let mut guard = MODELS_DIR.lock().unwrap();
+    *guard = Some(models_dir);
+}
+
+/// Set models directory from a custom root path.
+/// Parakeet models go in {root}/parakeet/ subfolder to avoid conflicts with other engines.
+pub fn set_models_directory_from_path(root: PathBuf) {
+    let models_dir = root.join("parakeet");
+
+    if !models_dir.exists() {
+        if let Err(e) = std::fs::create_dir_all(&models_dir) {
+            log::error!("Failed to create parakeet models directory: {}", e);
             return;
         }
     }
