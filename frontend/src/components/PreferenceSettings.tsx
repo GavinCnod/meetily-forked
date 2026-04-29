@@ -8,7 +8,7 @@ import { open } from "@tauri-apps/plugin-dialog"
 import Analytics from "@/lib/analytics"
 import AnalyticsConsentSwitch from "./AnalyticsConsentSwitch"
 import { useConfig, NotificationSettings } from "@/contexts/ConfigContext"
-import { configService } from "@/services/configService
+import { configService } from "@/services/configService"
 
 export function PreferenceSettings() {
   const {

@@ -130,7 +130,7 @@ pub async fn run_llm_terminology_correction<R: tauri::Runtime>(
     app: AppHandle<R>,
     meeting_id: String,
 ) -> Result<String, String> {
-    super::queue::enqueue_l3_correction(app, meeting_id).await
+    super::queue::enqueue_l3_correction(app, meeting_id).await.map(|_| "ok".to_string())
 }
 
 #[tauri::command]

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 use log::{error, info, warn};
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::database::models::TranscriptCorrection;
 use crate::database::repositories::terminology::TerminologyRepository;
@@ -318,7 +318,7 @@ fn build_l3_prompt(
         transcript,
     );
 
-    (system_prompt, user_prompt)
+    (system_prompt.to_string(), user_prompt)
 }
 
 /// Parse the LLM response into structured TranscriptCorrection objects.

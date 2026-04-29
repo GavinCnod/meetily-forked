@@ -112,13 +112,19 @@ pub async fn refresh_all_caches(
     });
 
     let enabled_count = rules.len();
-    let enabled_entries: Vec<&TerminologyEntry> = all.iter().filter(|e| e.enabled != 0).collect();
+    let enabled_entries: Vec<TerminologyEntry> = all.iter().filter(|e| e.enabled != 0).cloned().collect();
     let snapshot_hash = compute_snapshot_hash(&enabled_entries);
 
     // Build L1 initial_prompt from high-priority entries
     let (l1_prompt, l1_excluded_ids) = build_initial_prompt(&all);
 
-    let mut cache = cache_state.cache_ref().write().await;
+    let l1_prompt_len = l1_prompt.len();
+
+    // Push L1 prompt to Whisper engine for soft token biasing
+    crate::whisper_engine::set_l1_prompt(l1_prompt.clone());
+
+    let cache_ref = cache_state.cache_ref();
+    let mut cache = cache_ref.write().await;
     *cache = TerminologyCache {
         rules,
         l1_prompt,
@@ -128,16 +134,13 @@ pub async fn refresh_all_caches(
         enabled_count,
     };
 
-    // Push L1 prompt to Whisper engine for soft token biasing
-    crate::whisper_engine::set_l1_prompt(l1_prompt.clone());
-
     info!(
         "Terminology cache refreshed: {} total, {} enabled, {} rules compiled, {} invalid, L1 prompt {} chars (hash={})",
         total_count,
         enabled_count,
         cache.rules.len(),
         invalid_ids.len(),
-        l1_prompt.len(),
+        l1_prompt_len,
         &cache.snapshot_hash[..8]
     );
 

@@ -116,7 +116,7 @@ impl TermRule {
 /// Apply all enabled L2 terminology corrections to the raw STT text.
 /// Returns the corrected text and the number of corrections applied.
 /// Uses Cow<str> - no allocation when no rules match.
-pub fn apply_terminology_correction(text: &str, rules: &[TermRule]) -> (Cow<str>, u32) {
+pub fn apply_terminology_correction<'a>(text: &'a str, rules: &[TermRule]) -> (Cow<'a, str>, u32) {
     if rules.is_empty() || text.is_empty() {
         return (Cow::Borrowed(text), 0);
     }

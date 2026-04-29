@@ -9,7 +9,7 @@ use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 // Sequence counter for transcript updates
 static SEQUENCE_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -217,14 +217,14 @@ pub fn start_transcription_task<R: Runtime>(
                                                 Some(state) => {
                                                     let rules = state.get_rules().await;
                                                     if rules.is_empty() {
-                                                        (std::borrow::Cow::Borrowed(&transcript), 0)
+                                                        (std::borrow::Cow::Borrowed(transcript.as_str()), 0u32)
                                                     } else {
                                                         crate::terminology::corrector::apply_terminology_correction(
                                                             &transcript, &rules,
                                                         )
                                                     }
                                                 }
-                                                None => (std::borrow::Cow::Borrowed(&transcript), 0),
+                                                None => (std::borrow::Cow::Borrowed(transcript.as_str()), 0u32),
                                             }
                                         };
 
