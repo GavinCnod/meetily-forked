@@ -36,6 +36,8 @@ export function DownloadProgressStep() {
 
   const [recommendedModel, setRecommendedModel] = useState<string>('gemma3:1b');
   const [isMac, setIsMac] = useState(false);
+  const [parakeetDownloadDir, setParakeetDownloadDir] = useState<string>('');
+  const [summaryDownloadDir, setSummaryDownloadDir] = useState<string>('');
 
   const [parakeetState, setParakeetState] = useState<DownloadState>({
     status: parakeetDownloaded ? 'completed' : 'waiting',
@@ -57,6 +59,20 @@ export function DownloadProgressStep() {
   const downloadStartedRef = useRef(false);
   const retryingRef = useRef(false);
   const retryingSummaryRef = useRef(false);
+
+  /** 读取当前引擎实际使用的下载目录，避免前端根据规则自行猜测。 */
+  const loadDownloadDirectories = async () => {
+    try {
+      const [parakeetDir, summaryDir] = await Promise.all([
+        invoke<string>('parakeet_get_models_directory'),
+        invoke<string>('builtin_ai_get_models_directory'),
+      ]);
+      setParakeetDownloadDir(parakeetDir);
+      setSummaryDownloadDir(summaryDir);
+    } catch (error) {
+      console.error('[DownloadProgressStep] Failed to load download directories:', error);
+    }
+  };
 
   // Retry download handler
   const handleRetryDownload = async () => {
@@ -168,6 +184,17 @@ export function DownloadProgressStep() {
 
     fetchRecommendation();
     checkPlatform();
+    loadDownloadDirectories();
+  }, []);
+
+  useEffect(() => {
+    const unlisten = listen<string>('models-folder-changed', () => {
+      loadDownloadDirectories();
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
 
   // Start downloads on mount
@@ -435,6 +462,18 @@ export function DownloadProgressStep() {
     </div>
   );
 
+  /** 渲染单条目录信息，统一 setup 下载页里的路径展示样式。 */
+  const renderDirectoryItem = (label: string, path: string) => (
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-gray-600">{label}</p>
+      <div className="rounded-md bg-gray-50 px-3 py-2">
+        <p className="break-all font-mono text-xs text-gray-700">
+          {path || 'Loading...'}
+        </p>
+      </div>
+    </div>
+  );
+
   return (
     <OnboardingContainer
       title="Getting things ready"
@@ -458,6 +497,19 @@ export function DownloadProgressStep() {
             gemmaState,
             recommendedModel === 'gemma3:4b' ? '~2.5 GB' : '~806 MB'
           )}
+        </div>
+
+        <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-5">
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-medium text-gray-900">实际下载目录</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                这里显示当前引擎实际使用的模型目录，便于确认自定义路径是否已生效。
+              </p>
+            </div>
+            {renderDirectoryItem('Parakeet 当前实际下载目录', parakeetDownloadDir)}
+            {renderDirectoryItem('Summary 当前实际下载目录', summaryDownloadDir)}
+          </div>
         </div>
 
         {/* Info Message - Only show when Parakeet is downloaded */}

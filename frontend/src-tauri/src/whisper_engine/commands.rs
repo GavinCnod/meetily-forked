@@ -10,6 +10,12 @@ pub static WHISPER_ENGINE: Mutex<Option<Arc<WhisperEngine>>> = Mutex::new(None);
 // Global models directory path (set during app initialization)
 static MODELS_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
+/// 重置全局 Whisper 引擎实例，确保目录切换后重新按新路径初始化。
+fn reset_engine_instance() {
+    let mut guard = WHISPER_ENGINE.lock().unwrap();
+    *guard = None;
+}
+
 /// Initialize the models directory path using default app_data_dir location.
 /// Whisper models are stored directly in {app_data_dir}/models/.
 pub fn set_models_directory<R: Runtime>(app: &AppHandle<R>) {
@@ -46,6 +52,9 @@ pub fn set_models_directory_from_path(root: PathBuf) {
 
     let mut guard = MODELS_DIR.lock().unwrap();
     *guard = Some(models_dir);
+    drop(guard);
+
+    reset_engine_instance();
 }
 
 /// Get the configured models directory

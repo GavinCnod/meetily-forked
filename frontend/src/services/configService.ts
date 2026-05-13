@@ -136,6 +136,13 @@ export class ConfigService {
   async getDefaultModelsFolder(): Promise<string> {
     return invoke<string>('get_default_models_folder');
   }
+
+  /**
+   * 打开原生目录选择器并返回用户选择的模型目录
+   */
+  async selectModelsFolder(): Promise<string | null> {
+    return invoke<string | null>('select_models_folder');
+  }
 }
 
 // Export singleton instance

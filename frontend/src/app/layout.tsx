@@ -70,6 +70,7 @@ export default function RootLayout({
 }) {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
+  const [onboardingStatusResolved, setOnboardingStatusResolved] = useState(false)
 
   // Import audio state
   const [showDropOverlay, setShowDropOverlay] = useState(false)
@@ -89,14 +90,23 @@ export default function RootLayout({
         } else {
           console.log('[Layout] Onboarding completed, showing main app')
         }
+        setOnboardingStatusResolved(true)
       })
       .catch((error) => {
         console.error('[Layout] Failed to check onboarding status:', error)
         // Default to showing onboarding if we can't check
         setShowOnboarding(true)
         setOnboardingCompleted(false)
+        setOnboardingStatusResolved(true)
       })
   }, [])
+
+  useEffect(() => {
+    // 应用完成一次正常加载后，清除 chunk 自动恢复标记，便于后续再次兜底。
+    if (onboardingStatusResolved) {
+      window.sessionStorage.removeItem('meetily-chunk-reload-attempted')
+    }
+  }, [onboardingStatusResolved])
 
   // Disable context menu in production
   useEffect(() => {
@@ -230,9 +240,47 @@ export default function RootLayout({
     window.location.reload()
   }
 
+  /** 为开发态和桌面 WebView 提供一次性的 chunk 加载失败自恢复。 */
+  const chunkRecoveryScript = `
+    (function () {
+      if (window.__MEETILY_CHUNK_RECOVERY_INSTALLED__) return;
+      window.__MEETILY_CHUNK_RECOVERY_INSTALLED__ = true;
+
+      var storageKey = 'meetily-chunk-reload-attempted';
+
+      function tryReload(reason) {
+        var message = '';
+        try {
+          message = String(reason && (reason.message || reason) || '');
+        } catch (_) {}
+
+        if (message.indexOf('ChunkLoadError') === -1 && message.indexOf('Loading chunk') === -1) {
+          return;
+        }
+
+        try {
+          if (!window.sessionStorage.getItem(storageKey)) {
+            console.warn('[Meetily] Chunk load failed, reloading once:', message);
+            window.sessionStorage.setItem(storageKey, '1');
+            window.location.reload();
+          }
+        } catch (_) {}
+      }
+
+      window.addEventListener('error', function (event) {
+        tryReload(event && (event.error || event.message));
+      }, true);
+
+      window.addEventListener('unhandledrejection', function (event) {
+        tryReload(event && event.reason);
+      });
+    })();
+  `
+
   return (
     <html lang="en">
       <body className={`${sourceSans3.variable} font-sans antialiased`}>
+        <script dangerouslySetInnerHTML={{ __html: chunkRecoveryScript }} />
         <AnalyticsProvider>
           <RecordingStateProvider>
             <TranscriptProvider>
@@ -248,7 +296,13 @@ export default function RootLayout({
                               <DownloadProgressToastProvider />
 
                               {/* Show onboarding or main app */}
-                              {showOnboarding ? (
+                              {!onboardingStatusResolved ? (
+                                <div className="flex min-h-screen items-center justify-center bg-gray-50">
+                                  <div className="rounded-lg border border-gray-200 bg-white px-6 py-4 text-sm text-gray-600 shadow-sm">
+                                    正在检查初始设置...
+                                  </div>
+                                </div>
+                              ) : showOnboarding ? (
                                 <OnboardingFlow onComplete={handleOnboardingComplete} />
                               ) : (
                                 <div className="flex">

@@ -273,6 +273,33 @@ pub async fn builtin_ai_is_model_ready<R: Runtime>(
     Ok(ready)
 }
 
+/// 获取当前 Summary 引擎实际使用的模型目录，供前端展示与排查。
+#[tauri::command]
+pub async fn builtin_ai_get_models_directory<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, ModelManagerState>,
+) -> Result<String, String> {
+    let manager = {
+        {
+            let manager_lock = state.0.lock().await;
+            if manager_lock.is_none() {
+                drop(manager_lock);
+                init_model_manager(&app)
+                    .await
+                    .map_err(|e| format!("Failed to initialize model manager: {}", e))?;
+            }
+        }
+
+        let manager_lock = state.0.lock().await;
+        manager_lock
+            .as_ref()
+            .ok_or_else(|| "Model manager not initialized".to_string())?
+            .clone()
+    };
+
+    Ok(manager.get_models_directory().to_string_lossy().to_string())
+}
+
 /// Check if any summary model is available (for onboarding)
 /// Returns the first available model name by priority, or None if no models exist
 #[tauri::command]

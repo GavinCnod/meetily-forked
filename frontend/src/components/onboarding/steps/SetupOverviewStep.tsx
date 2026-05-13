@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
 import { Download, Info, Folder, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { OnboardingContainer } from '../OnboardingContainer';
 import { useOnboarding } from '@/contexts/OnboardingContext';
+import { configService } from '@/services/configService';
 import {
   Tooltip,
   TooltipContent,
@@ -64,14 +64,11 @@ export function SetupOverviewStep() {
     }
   }, [modelsFolder, defaultFolder]);
 
+  /** 使用后端统一打开目录选择器，避免前端插件层导致按钮无响应。 */
   const handleSelectFolder = async () => {
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Models Folder',
-      });
-      if (selected && typeof selected === 'string') {
+      const selected = await configService.selectModelsFolder();
+      if (selected) {
         setModelsFolder(selected);
         setDisplayFolder(selected);
       }

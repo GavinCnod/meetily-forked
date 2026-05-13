@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react"
 import { Switch } from "./ui/switch"
 import { FolderOpen, RotateCcw, AlertTriangle } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
-import { open } from "@tauri-apps/plugin-dialog"
 import Analytics from "@/lib/analytics"
 import AnalyticsConsentSwitch from "./AnalyticsConsentSwitch"
 import { useConfig, NotificationSettings } from "@/contexts/ConfigContext"
@@ -133,14 +132,11 @@ export function PreferenceSettings() {
   const displayModelsFolder = modelsFolder || defaultModelsFolder;
   const isCustomModelsFolder = modelsFolder !== null && modelsFolder !== defaultModelsFolder;
 
+  /** 通过后端命令打开目录选择器，保证设置页与引导页行为一致。 */
   const handleSelectModelsFolder = async () => {
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Models Folder',
-      });
-      if (selected && typeof selected === 'string') {
+      const selected = await configService.selectModelsFolder();
+      if (selected) {
         // Show warning before switching
         setPendingFolder(selected);
         setShowFolderWarning(true);

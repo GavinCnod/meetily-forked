@@ -62,6 +62,7 @@ use log::{error as log_error, info as log_info};
 use notifications::commands::NotificationManagerState;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri_plugin_dialog::DialogExt;
 use tokio::sync::RwLock;
 
 static RECORDING_FLAG: AtomicBool = AtomicBool::new(false);
@@ -505,6 +506,20 @@ async fn get_default_models_folder(app: AppHandle) -> Result<String, String> {
     Ok(default_path.to_string_lossy().to_string())
 }
 
+/// 打开系统目录选择器，供前端安全地选择模型存储目录。
+#[tauri::command]
+async fn select_models_folder(app: AppHandle) -> Result<Option<String>, String> {
+    log::info!("Opening models folder picker");
+
+    let selected = app
+        .dialog()
+        .file()
+        .set_title("Select Models Folder")
+        .blocking_pick_folder();
+
+    Ok(selected.map(|path| path.to_string()))
+}
+
 pub fn run() {
     log::set_max_level(log::LevelFilter::Info);
 
@@ -785,6 +800,7 @@ pub fn run() {
             summary::summary_engine::builtin_ai_delete_model,
             summary::summary_engine::builtin_ai_is_model_ready,
             summary::summary_engine::builtin_ai_get_available_summary_model,
+            summary::summary_engine::builtin_ai_get_models_directory,
             summary::summary_engine::builtin_ai_get_recommended_model,
             openrouter::get_openrouter_models,
             audio::recording_preferences::get_recording_preferences,
@@ -858,6 +874,7 @@ pub fn run() {
             get_models_folder,
             set_models_folder,
             get_default_models_folder,
+            select_models_folder,
             // Terminology commands (Phase 1A)
             terminology::commands::get_terminology_list,
             terminology::commands::save_terminology_entry,

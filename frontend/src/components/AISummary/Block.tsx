@@ -18,6 +18,7 @@ interface BlockProps {
   onCreateNewBlock?: (blockId: string, newBlockContent: string, blockType: Block['type'], currentBlockContent?: string) => void;
 }
 
+
 interface CommandOption {
   id: string;
   label: string;
